@@ -200,11 +200,11 @@ async function handlePostback(message: MessagingEvent) {
     const payload = message.postback?.payload;
     if (!payload) return;
 
-    // Parse payload: campaign_<id>_user_<userId>
+    // Parse payload: campaign_<id>_user_<recipientId>
     const match = payload.match(/^campaign_(\w+)_user_(\w+)$/);
     if (!match) return;
 
-    const [, campaignId, userId] = match;
+    const [, campaignId] = match;
 
     const campaign = await prisma.campaign.findUnique({
       where: { id: campaignId },
