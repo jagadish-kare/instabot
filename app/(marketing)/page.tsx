@@ -13,6 +13,8 @@ import {
   Sparkles
 } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
