@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // hashed with bcrypt
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  instagramAccounts InstagramAccount[]
+}
+
+model InstagramAccount {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  instagramId      String    @unique  // Instagram Business Account ID
+  username         String
+  name             String?
+  profilePicture   String?
+  followersCount   Int?
+  
+  pageId           String    // Facebook Page ID
+  accessToken      String    // Encrypted Page Access Token
+  tokenExpiresAt   DateTime?
+  
+  webhookSubscribed Boolean  @default(false)
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  
+  campaigns        Campaign[]
+}
+
+model Campaign {
+  id                  String   @id @default(cuid())
+  instagramAccountId  String
+  instagramAccount    InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  
+  // Post info
+  mediaId             String   // Instagram post ID
+  mediaUrl            String?  // Thumbnail URL for display
+  mediaCaption        String?
+  mediaPermalink      String?
+  
+  // Trigger
+  keywords            String[] // Array of trigger keywords
+  
+  // Follow Gating
+  requireFollow       Boolean  @default(false)
+  openingMessage      String?  // Initial DM if follow gating ON
+  buttonText          String?  // Button text (max 20 chars)
+  notFollowingMessage String?  // Message if not following
+  
+  // Reveal Content (the actual content to deliver)
+  revealMessage       String   // Main content message
+  revealButtonText    String?  // Optional link button text
+  revealButtonUrl     String?  // Optional link URL
+  
+  // Status
+  isActive            Boolean  @default(true)
+  
+  // Stats (denormalized for quick access)
+  commentsDetected    Int      @default(0)
+  dmsSent             Int      @default(0)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  logs                DmLog[]
+}
+
+model DmLog {
+  id          String   @id @default(cuid())
+  campaignId  String
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  commentId   String?  // Original comment ID
+  recipientId String   // Instagram Scoped User ID (IGSID)
+  username    String?  // Username if available
+  
+  action      DmAction
+  status      DmStatus
+  error       String?  // Error message if failed
+  
+  createdAt   DateTime @default(now())
+}
+
+enum DmAction {
+  COMMENT_DETECTED
+  OPENING_DM_SENT
+  BUTTON_TAPPED
+  FOLLOW_CHECKED_YES
+  FOLLOW_CHECKED_NO
+  REVEAL_SENT
+  RETRY_SENT
+}
+
+enum DmStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
