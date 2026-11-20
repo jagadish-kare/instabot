@@ -7,9 +7,13 @@ import { MetaAPIClient } from "@/lib/meta/client";
 
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID!;
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET!;
-const REDIRECT_URI = `${process.env.NEXTAUTH_URL}/api/instagram/callback`;
 
 export async function GET(request: NextRequest) {
+  // Get the base URL from the request
+  const url = new URL(request.url);
+  const baseUrl = `${url.protocol}//${url.host}`;
+  const redirectUri = `${baseUrl}/api/instagram/callback`;
+
   const session = await getServerSession(authOptions);
   
   if (!session?.user?.id) {
@@ -33,7 +37,7 @@ export async function GET(request: NextRequest) {
     const tokenUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
     tokenUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
     tokenUrl.searchParams.set("client_secret", FACEBOOK_APP_SECRET);
-    tokenUrl.searchParams.set("redirect_uri", REDIRECT_URI);
+    tokenUrl.searchParams.set("redirect_uri", redirectUri);
     tokenUrl.searchParams.set("code", code);
 
     const tokenResponse = await fetch(tokenUrl.toString());
