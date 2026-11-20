@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { encrypt } from "@/lib/encryption";
-import { MetaAPIClient } from "@/lib/meta/client";
 
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID!;
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET!;
@@ -33,90 +32,84 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Exchange code for access token
-    const tokenUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
-    tokenUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
-    tokenUrl.searchParams.set("client_secret", FACEBOOK_APP_SECRET);
-    tokenUrl.searchParams.set("redirect_uri", redirectUri);
-    tokenUrl.searchParams.set("code", code);
+    // Exchange code for access token using Instagram's token endpoint
+    const tokenResponse = await fetch("https://api.instagram.com/oauth/access_token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: FACEBOOK_APP_ID,
+        client_secret: FACEBOOK_APP_SECRET,
+        grant_type: "authorization_code",
+        redirect_uri: redirectUri,
+        code: code,
+      }),
+    });
 
-    const tokenResponse = await fetch(tokenUrl.toString());
     const tokenData = await tokenResponse.json();
 
-    if (tokenData.error) {
-      console.error("Token exchange error:", tokenData.error);
+    if (tokenData.error_type || tokenData.error) {
+      console.error("Token exchange error:", tokenData);
       return NextResponse.redirect(new URL("/settings?error=token_exchange", request.url));
     }
 
-    const userAccessToken = tokenData.access_token;
+    const shortLivedToken = tokenData.access_token;
+    const instagramUserId = tokenData.user_id;
 
-    // Get Facebook Pages
-    const client = new MetaAPIClient(userAccessToken);
-    const pages = await client.getPages();
+    // Exchange for long-lived token
+    const longLivedTokenUrl = new URL("https://graph.instagram.com/access_token");
+    longLivedTokenUrl.searchParams.set("grant_type", "ig_exchange_token");
+    longLivedTokenUrl.searchParams.set("client_secret", FACEBOOK_APP_SECRET);
+    longLivedTokenUrl.searchParams.set("access_token", shortLivedToken);
 
-    if (pages.length === 0) {
-      return NextResponse.redirect(new URL("/settings?error=no_pages", request.url));
+    const longLivedResponse = await fetch(longLivedTokenUrl.toString());
+    const longLivedData = await longLivedResponse.json();
+
+    const accessToken = longLivedData.access_token || shortLivedToken;
+
+    // Get Instagram profile using Instagram Graph API
+    const profileUrl = new URL(`https://graph.instagram.com/v21.0/me`);
+    profileUrl.searchParams.set("fields", "user_id,username,name,profile_picture_url,followers_count,account_type");
+    profileUrl.searchParams.set("access_token", accessToken);
+
+    const profileResponse = await fetch(profileUrl.toString());
+    const profile = await profileResponse.json();
+
+    if (profile.error) {
+      console.error("Profile fetch error:", profile.error);
+      return NextResponse.redirect(new URL("/settings?error=profile_fetch", request.url));
     }
 
-    // Find a page with Instagram Business Account
-    let instagramId: string | null = null;
-    let pageId: string | null = null;
-    let pageAccessToken: string | null = null;
-
-    for (const page of pages) {
-      const pageData = await client.getInstagramAccount(page.id);
-      
-      if (pageData.instagram_business_account?.id) {
-        instagramId = pageData.instagram_business_account.id;
-        pageId = page.id;
-        pageAccessToken = page.access_token;
-        break;
-      }
-    }
-
-    if (!instagramId || !pageId || !pageAccessToken) {
-      return NextResponse.redirect(new URL("/settings?error=no_instagram", request.url));
-    }
-
-    // Get Instagram profile
-    const pageClient = new MetaAPIClient(pageAccessToken);
-    const profile = await pageClient.getInstagramProfile(instagramId);
-
-    // Subscribe to webhooks
-    try {
-      await pageClient.subscribeToWebhooks(instagramId);
-    } catch (e) {
-      console.error("Webhook subscription failed:", e);
-      // Continue even if webhook subscription fails
-    }
-
+    const instagramId = profile.user_id || instagramUserId;
+    
     // Encrypt the access token
-    const encryptedToken = encrypt(pageAccessToken);
+    const encryptedToken = encrypt(accessToken);
 
     // Save or update Instagram account
     await prisma.instagramAccount.upsert({
-      where: { instagramId },
+      where: { instagramId: String(instagramId) },
       update: {
         userId: session.user.id,
         username: profile.username,
-        name: profile.name,
+        name: profile.name || profile.username,
         profilePicture: profile.profile_picture_url,
-        followersCount: profile.followers_count,
-        pageId,
+        followersCount: profile.followers_count || 0,
+        pageId: String(instagramId), // For Instagram Login, we use Instagram ID
         accessToken: encryptedToken,
-        webhookSubscribed: true,
+        webhookSubscribed: false,
         updatedAt: new Date(),
       },
       create: {
         userId: session.user.id,
-        instagramId,
+        instagramId: String(instagramId),
         username: profile.username,
-        name: profile.name,
+        name: profile.name || profile.username,
         profilePicture: profile.profile_picture_url,
-        followersCount: profile.followers_count,
-        pageId,
+        followersCount: profile.followers_count || 0,
+        pageId: String(instagramId),
         accessToken: encryptedToken,
-        webhookSubscribed: true,
+        webhookSubscribed: false,
       },
     });
 

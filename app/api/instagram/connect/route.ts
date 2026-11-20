@@ -2,15 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID!;
 
-// Using Facebook Login scopes (not Instagram Login scopes)
-// For Facebook OAuth, use: instagram_basic, instagram_manage_comments, instagram_manage_messages
-// NOT: instagram_business_basic, instagram_business_manage_comments, etc.
+// Using Instagram Business Login scopes
+// These require Instagram Login flow via graph.instagram.com
 const SCOPES = [
-  "instagram_basic",
-  "instagram_manage_comments", 
-  "instagram_manage_messages",
-  "pages_show_list",
-  "pages_read_engagement",
+  "instagram_business_basic",
+  "instagram_business_manage_messages",
+  "instagram_business_manage_comments",
 ].join(",");
 
 export async function GET(request: NextRequest) {
@@ -19,11 +16,14 @@ export async function GET(request: NextRequest) {
   const baseUrl = `${url.protocol}//${url.host}`;
   const redirectUri = `${baseUrl}/api/instagram/callback`;
 
-  const authUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
+  // Use Instagram's OAuth endpoint for Business Login
+  const authUrl = new URL("https://www.instagram.com/oauth/authorize");
   authUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
   authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set("scope", SCOPES);
   authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("enable_fb_login", "0");
+  authUrl.searchParams.set("force_authentication", "1");
 
   return NextResponse.redirect(authUrl.toString());
 }
