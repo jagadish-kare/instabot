@@ -21,10 +21,11 @@ export async function GET(request: NextRequest) {
 
   const code = request.nextUrl.searchParams.get("code");
   const error = request.nextUrl.searchParams.get("error");
+  const errorDescription = request.nextUrl.searchParams.get("error_description");
 
   if (error) {
-    console.error("OAuth error:", error);
-    return NextResponse.redirect(new URL("/settings?error=oauth_denied", request.url));
+    console.error("OAuth error:", error, errorDescription);
+    return NextResponse.redirect(new URL(`/settings?error=oauth_denied&msg=${encodeURIComponent(errorDescription || error)}`, request.url));
   }
 
   if (!code) {
@@ -44,19 +45,26 @@ export async function GET(request: NextRequest) {
 
     if (tokenData.error) {
       console.error("Token exchange error:", tokenData.error);
-      return NextResponse.redirect(new URL("/settings?error=token_exchange", request.url));
+      return NextResponse.redirect(new URL(`/settings?error=token_exchange&msg=${encodeURIComponent(tokenData.error.message || 'Token exchange failed')}`, request.url));
     }
 
     const userAccessToken = tokenData.access_token;
 
     // Get Facebook Pages the user manages
-    const pagesUrl = `https://graph.facebook.com/v21.0/me/accounts?access_token=${userAccessToken}`;
+    const pagesUrl = `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${userAccessToken}`;
     const pagesResponse = await fetch(pagesUrl);
     const pagesData = await pagesResponse.json();
 
+    console.log("Pages data:", JSON.stringify(pagesData, null, 2));
+
+    if (pagesData.error) {
+      console.error("Pages fetch error:", pagesData.error);
+      return NextResponse.redirect(new URL(`/settings?error=pages_fetch&msg=${encodeURIComponent(pagesData.error.message)}`, request.url));
+    }
+
     if (!pagesData.data || pagesData.data.length === 0) {
-      console.error("No pages found");
-      return NextResponse.redirect(new URL("/settings?error=no_pages", request.url));
+      console.error("No pages found for this user");
+      return NextResponse.redirect(new URL("/settings?error=no_pages&msg=No+Facebook+Pages+found.+Make+sure+you+manage+a+Facebook+Page.", request.url));
     }
 
     // Find a page with Instagram Business Account
@@ -67,20 +75,25 @@ export async function GET(request: NextRequest) {
     let instagramPicture: string | null = null;
     let instagramFollowers: number = 0;
 
+    // Check pages that already have instagram_business_account in the response
     for (const page of pagesData.data) {
-      // Check if this page has an Instagram Business Account
-      const igUrl = `https://graph.facebook.com/v21.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`;
-      const igResponse = await fetch(igUrl);
-      const igData = await igResponse.json();
+      console.log(`Checking page: ${page.name} (${page.id}), instagram_business_account:`, page.instagram_business_account);
       
-      if (igData.instagram_business_account?.id) {
-        instagramId = igData.instagram_business_account.id;
+      if (page.instagram_business_account?.id) {
+        instagramId = page.instagram_business_account.id;
         pageAccessToken = page.access_token;
         
         // Get Instagram profile details
         const profileUrl = `https://graph.facebook.com/v21.0/${instagramId}?fields=id,username,name,profile_picture_url,followers_count&access_token=${pageAccessToken}`;
         const profileResponse = await fetch(profileUrl);
         const profile = await profileResponse.json();
+        
+        console.log("Instagram profile:", JSON.stringify(profile, null, 2));
+        
+        if (profile.error) {
+          console.error("Profile fetch error:", profile.error);
+          continue;
+        }
         
         instagramUsername = profile.username;
         instagramName = profile.name || profile.username;
@@ -91,8 +104,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (!instagramId || !pageAccessToken) {
-      console.error("No Instagram Business Account found");
-      return NextResponse.redirect(new URL("/settings?error=no_instagram", request.url));
+      // List the pages we found for debugging
+      const pageNames = pagesData.data.map((p: { name: string }) => p.name).join(", ");
+      console.error("No Instagram Business Account found. Pages found:", pageNames);
+      return NextResponse.redirect(new URL(`/settings?error=no_instagram&msg=Found+${pagesData.data.length}+Facebook+Page(s)+but+none+have+an+Instagram+Business+account+connected.+Pages:+${encodeURIComponent(pageNames)}`, request.url));
     }
 
     // Encrypt the access token
@@ -128,6 +143,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/settings?success=connected", request.url));
   } catch (error) {
     console.error("Instagram connection error:", error);
-    return NextResponse.redirect(new URL("/settings?error=connection_failed", request.url));
+    return NextResponse.redirect(new URL(`/settings?error=connection_failed&msg=${encodeURIComponent(String(error))}`, request.url));
   }
 }
