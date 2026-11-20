@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID!;
 
 const SCOPES = [
-  "instagram_basic",
-  "instagram_manage_messages",
-  "instagram_manage_comments",
+  "instagram_business_basic",
+  "instagram_business_manage_messages",
+  "instagram_business_manage_comments",
   "pages_show_list",
   "pages_read_engagement",
   "business_management",
