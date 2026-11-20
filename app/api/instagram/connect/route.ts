@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID!;
 
-// Using Facebook Login for Business with Instagram permissions
-// Your app has: instagram_business_basic, instagram_business_manage_messages, etc.
-// These work with Facebook Login when you have the "Manage messaging and content on Instagram" use case
+// Using Facebook Login with Instagram permissions
+// These are the correct scope names for Facebook OAuth (not instagram_business_*)
 const SCOPES = [
-  "instagram_business_basic",
-  "instagram_business_manage_messages",
-  "instagram_business_manage_comments",
+  "instagram_manage_messages",
+  "instagram_manage_comments",
   "pages_show_list",
   "pages_read_engagement",
+  "business_management",
 ].join(",");
 
 export async function GET(request: NextRequest) {
@@ -19,7 +18,7 @@ export async function GET(request: NextRequest) {
   const baseUrl = `${url.protocol}//${url.host}`;
   const redirectUri = `${baseUrl}/api/instagram/callback`;
 
-  // Use Facebook OAuth with Instagram Business permissions
+  // Use Facebook OAuth with Instagram permissions
   const authUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
   authUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
   authUrl.searchParams.set("redirect_uri", redirectUri);
