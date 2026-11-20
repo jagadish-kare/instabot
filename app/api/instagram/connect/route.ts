@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID!;
 
+// Using Facebook Login scopes (not Instagram Login scopes)
+// For Facebook OAuth, use: instagram_basic, instagram_manage_comments, instagram_manage_messages
+// NOT: instagram_business_basic, instagram_business_manage_comments, etc.
 const SCOPES = [
-  "instagram_business_basic",
-  "instagram_business_manage_messages",
-  "instagram_business_manage_comments",
+  "instagram_basic",
+  "instagram_manage_comments", 
+  "instagram_manage_messages",
   "pages_show_list",
   "pages_read_engagement",
-  "business_management",
 ].join(",");
 
 export async function GET(request: NextRequest) {
